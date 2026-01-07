@@ -84,6 +84,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         LEFT JOIN [DB02].[dbo].[SMP_LocationRequest] lr_dest ON lr_dest.Description = j.Destination_  
         WHERE j.CreateDateTime >= @startDate
         AND j.CreateDateTime < @endDate
+        ORDER BY CreateDateTime ASC
       `);
       
         //      WHERE j.CreateDateTime >= @startDate AND j.CreateDateTime <= @endDate
