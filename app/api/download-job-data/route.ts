@@ -3,26 +3,38 @@ import { NextRequest, NextResponse } from 'next/server';
 import ExcelJS from 'exceljs';
 import sql, { ConnectionPool, IResult, config as SQLConfig } from 'mssql';
 
-const config: SQLConfig = {
-  user: process.env.DB_USER || 'default_user',
-  password: process.env.DB_PASSWORD || 'default_password',
-  server: process.env.DB_SERVER || 'localhost',
-  database: process.env.DB_NAME || 'DB02',
-  authentication: {
-    type: 'default',
-    options: {
-      userName: process.env.DB_USER || 'your_user',
-      password: process.env.DB_PASSWORD || 'your_password',
-    },
-  },
-  options: {
-    encrypt: true,
-    trustServerCertificate: true,
-    connectTimeout: 15000,
-    requestTimeout: 30000,
-  },
-};
+function buildSqlConfig(): SQLConfig {
+  const server = process.env.DB_SERVER;
+  const user = process.env.DB_USER;
+  const password = process.env.DB_PASSWORD;
+  const database = process.env.DB_NAME;
+  const port = process.env.DB_PORT ? Number(process.env.DB_PORT) : undefined;
 
+  if (!server || !user || !password || !database) {
+    throw new Error(
+      'Missing database configuration. Please set DB_SERVER, DB_USER, DB_PASSWORD, DB_NAME' +
+        (process.env.DB_PORT ? '' : ' (optional DB_PORT)')
+    );
+  }
+
+  if (process.env.DB_PORT && Number.isNaN(port)) {
+    throw new Error('Invalid DB_PORT. Must be a number.');
+  }
+
+  return {
+    user,
+    password,
+    server,
+    database,
+    ...(port ? { port } : {}),
+    options: {
+      encrypt: true,
+      trustServerCertificate: true,
+      connectTimeout: 15000,
+      requestTimeout: 30000,
+    },
+  };
+}
 
 interface JobData {
   JobNo: string;
@@ -49,17 +61,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   try {
     // สร้าง Connection Pool
+    const config = buildSqlConfig();
     pool = new sql.ConnectionPool(config);
     await pool.connect();
 
     // Query ข้อมูล
     const result: IResult<JobData> = await pool
       .request()
-    //   .input('startDate', sql.DateTime, new Date(startDate))
-    //   .input('endDate', sql.DateTime, new Date(endDate + ' 23:59:59'))
-        .input('startDate', sql.DateTime, new Date(startDate))
-        .input('endDate', sql.DateTime, new Date(new Date(endDate).setDate(new Date(endDate).getDate() + 1))
-        )  //ใช้ < nextDay แทน <= 23:59:59
+      .input('startDate', sql.DateTime, new Date(startDate))
+      .input('endDate', sql.DateTime, new Date(new Date(endDate).setDate(new Date(endDate).getDate() + 1)))
       .query<JobData>(`
         SELECT DISTINCT  
           j.JobNo, 
@@ -86,9 +96,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         AND j.CreateDateTime < @endDate
         ORDER BY CreateDateTime ASC
       `);
-      
-        //      WHERE j.CreateDateTime >= @startDate AND j.CreateDateTime <= @endDate
-        // ORDER BY j.CreateDateTime ASC
 
     // สร้าง Excel Workbook
     const workbook = new ExcelJS.Workbook();
